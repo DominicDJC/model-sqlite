@@ -47,7 +47,7 @@ def test_model_sqlite():
     # Reload database and table, to ensure proper loading of an existing table
     database = None
     table = None
-    database = Database("test.db", logging=True)
+    database = Database("test.db")
     table = Messages("test", database, MessageModel)
     select = table.select()
     assert len(select) == 1
