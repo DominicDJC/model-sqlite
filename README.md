@@ -5,7 +5,7 @@
 [![Changelog](https://img.shields.io/github/v/release/DominicDJC/model-sqlite?include_prereleases&label=changelog)](https://github.com/DominicDJC/model-sqlite/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/DominicDJC/model-sqlite/blob/main/LICENSE)
 
-Create and use SQLite databases with classes
+A model/class based system for interacting with an using SQLite
 
 ## Installation
 
@@ -16,3 +16,20 @@ pip install model-sqlite
 ## Usage
 
 Usage instructions go here.
+
+## Development
+
+To contribute to this library, first checkout the code. Then create a new virtual environment:
+```bash
+cd model-sqlite
+python -m venv venv
+source venv/bin/activate
+```
+Now install the dependencies and test dependencies:
+```bash
+python -m pip install -e '.[test]'
+```
+To run the tests:
+```bash
+python -m pytest
+```

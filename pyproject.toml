@@ -1,7 +1,7 @@
 [project]
 name = "model-sqlite"
-version = "0.1"
-description = "Create and use SQLite databases with classes"
+version = "0.2"
+description = "A model/class based system for interacting with an using SQLite"
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [{name = "Dominic Coletti"}]

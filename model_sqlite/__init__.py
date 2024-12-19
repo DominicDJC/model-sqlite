@@ -23,12 +23,14 @@ class ColumnDescription:
                 self.not_null = False
         self.has_default: bool = default != None
         self.default = default
-        self.sql: str = f"{name} {to_sql_type(self.type)}{' PRIMARY KEY' if self.primary_key else ''}{' NOT NULL' if self.not_null else ''}{f' DEFAULT {stringify(default)}' if self.has_default else ''}"
+        self.sql: str = f"{name} {__to_sql_type__(self.type)}{' PRIMARY KEY' if self.primary_key else ''}{' NOT NULL' if self.not_null else ''}{f' DEFAULT {__stringify__(default)}' if self.has_default else ''}"
     
-    def load(self, value):
-        if self.type in [str, dict, list] and value != None:
-            value = break_string(value)
-            if self.type != str:
+    def load(self, value, fix_string: bool = False):
+        if value != None:
+            if fix_string and self.type == str:
+                return __break_string__(value)
+            if (self.type == dict or __is_list__(self.type)):
+                value = __break_string__(value)
                 value = json.loads(value)
         return value
 
@@ -54,14 +56,19 @@ class SortOrder(Enum):
     DESC = "DESC"
 
 
+class Column:
+    def __init__(self, name: str) -> None:
+        self.name: str = name
+
+
 class Statement:
-    def __init__(self, left_operand: str, operator: Operator, right_operand: str) -> None:
-        self.left_operand: str = left_operand
+    def __init__(self, left_operand, operator: Operator, right_operand) -> None:
+        self.left_operand = left_operand
         self.operator: Operator = operator
-        self.right_operand: str = right_operand
+        self.right_operand = right_operand
     
     def __str__(self) -> str:
-        return f"{self.left_operand} {self.operator.value} {self.right_operand}"
+        return f"{__stringify__(self.left_operand)} {self.operator.value} {__stringify__(self.right_operand)}"
 
 
 class StatementList:
@@ -106,7 +113,6 @@ class Database:
         self.cursor: sqlite3.Cursor = self.database.cursor()
 
     def execute(self, command: str, commit: bool = False, vacuum: bool = False) -> sqlite3.Cursor:
-        print(command)
         result = self.cursor.execute(command)
         if commit:
             self.database.commit()
@@ -135,7 +141,7 @@ class Database:
         if sort_column:
             command += f" ORDER BY {sort_column} {sort_order.value}"
         if length:
-            command += f" LIMI {str(length)}"
+            command += f" LIMIT {str(length)}"
         return self.execute(command).fetchall()
     
     def insert(self, table: str, data: list, columns: list[str] = None) -> None:
@@ -144,20 +150,20 @@ class Database:
         command: str = f"INSERT INTO {table} "
         if columns:
             command += f"({', '.join(columns)}) "
-        command += f"VALUES ({', '.join([stringify(d) for d in data])})"
+        command += f"VALUES ({', '.join([__stringify__(d) for d in data])})"
         self.execute(command, True)
     
     def update(self, table: str, data: list, columns: list[str], where: StatementList = None) -> None:
         if len(data) != len(columns):
             raise InvalidColumns("Data does not match the columns")
-        stringed_data: list[str] = [stringify(d) for d in data]
+        stringed_data: list[str] = [__stringify__(d) for d in data]
         self.execute(f"UPDATE {table} SET {', '.join([f'{columns[i]} = {stringed_data[i]}' for i in range(len(columns))])} WHERE {str(where)}", True)
 
     def delete(self, table: str, where: StatementList) -> None:
         self.execute(f"DELETE FROM {table} WHERE {str(where)}", True)
     
     def table_exists(self, table: str) -> bool:
-        return len(self.select("sqlite_master", ["name"], where=StatementList(Statement("name", Operator.EQUAL, stringify(table))))) > 0
+        return len(self.select("sqlite_master", ["name"], where=StatementList(Statement(Column("name"), Operator.EQUAL, table)))) > 0
     
     def get_table_columns(self, table: str) -> list[tuple]:
         return self.execute(f"PRAGMA table_info({table})").fetchall()
@@ -170,14 +176,14 @@ class Database:
 
 
 class Table(Generic[T]):
-    def __init__(self, name: str, database: Database, model: type = None, force_compatibility: bool = False) -> None:
+    def __init__(self, name: str, database: Database, model: type = None, dont_force_compatibility: bool = False) -> None:
         self.name: str = name
         self._database: Database = database
         self._model: type = model
-        self._column_descriptions: dict[str, ColumnDescription] = interpret_class(self.__class__)
+        self._column_descriptions: dict[str, ColumnDescription] = __interpret_class__(self.__class__)
         if not self._database.table_exists(self.name):
             self._database.create_table(self.name, self._column_descriptions)
-        elif force_compatibility:
+        elif not dont_force_compatibility:
             table_columns: list[tuple] = self._database.get_table_columns(self.name)
             for row in table_columns:
                 incompatible: bool = False
@@ -185,11 +191,11 @@ class Table(Generic[T]):
                     incompatible = True
                 else:
                     column: ColumnDescription = self._column_descriptions[row[1]]
-                    if  row[2] != to_sql_type(column.type):
+                    if  row[2] != __to_sql_type__(column.type):
                         incompatible = True
                     elif row[3] == 0 and column.not_null:
                         incompatible = True
-                    elif column.load(row[4]) != column.default:
+                    elif column.load(row[4], fix_string=True) != column.default:
                         incompatible = True
                     elif row[5] != 0 and not column.primary_key:
                         incompatible = True
@@ -205,17 +211,17 @@ class Table(Generic[T]):
         return self._database.select(self.name) == []
 
     def delete(self, object: T = None) -> None:
-        self._database.delete(self.name, process_object(self._column_descriptions, object).statement_list if object else None)
+        self._database.delete(self.name, __process_object__(self._column_descriptions, object).statement_list if object else None)
     
     def clear(self) -> None:
         self._database.clear_table(self.name)
 
     def insert(self, object: T) -> None:
-        processed: ProcessedObject = process_object(self._column_descriptions, object)
+        processed: ProcessedObject = __process_object__(self._column_descriptions, object)
         self._database.insert(self.name, processed.data, processed.columns)
 
     def update(self, object: T) -> None:
-        processed: ProcessedObject = process_object(self._column_descriptions, object)
+        processed: ProcessedObject = __process_object__(self._column_descriptions, object)
         self._database.update(self.name, processed.data, processed.columns, processed.statement_list)
 
     def select(self, columns: list[str] = None, length: int = None, where: StatementList = None, sort_column: str = None, sort_order: SortOrder = SortOrder.DESC) -> list[T]:
@@ -239,7 +245,7 @@ class Table(Generic[T]):
         return typed_result
 
 
-def interpret_class(cls: type) -> dict:
+def __interpret_class__(cls: type) -> dict:
     column_descriptions: dict[str, ColumnDescription] = {}
     class_vars: dict = vars(cls)
     for key, value in cls.__annotations__.items():
@@ -250,49 +256,61 @@ def interpret_class(cls: type) -> dict:
         )
     return column_descriptions
 
-def to_sql_type(cls: type) -> str:
+def __to_sql_type__(cls: type) -> str:
     if cls == int:
         return "INTEGER"
     elif cls == float:
         return "REAL"
-    elif cls in [str, dict, list]:
+    elif cls in [str, dict] or __is_list__(cls):
         return "TEXT"
     return ""
 
-def fix_string(string: str) -> str:
+def __fix_string__(string: str) -> str:
     string = string.replace("'", "''")
     return f"'{string}'"
 
-def break_string(string: str) -> str:
+def __break_string__(string: str) -> str:
     string = string.removeprefix("'")
     string = string.removesuffix("'")
     string = string.replace("''", "'")
     return string
 
-def stringify(data) -> str:
+def __stringify__(data) -> str:
     if type(data) == str:
-        return fix_string(data)
+        return __fix_string__(data)
     elif type(data) in [dict, list]:
-        return fix_string(json.dumps(data))
+        return __fix_string__(json.dumps(data))
+    elif type(data) == Column:
+        return data.name
     elif data == None:
         return "NULL"
     else:
         return str(data)
 
-def process_object(column_descriptions: dict[str, ColumnDescription], object) -> ProcessedObject:
+def __process_object__(column_descriptions: dict[str, ColumnDescription], object) -> ProcessedObject:
     data: list = []
     obj_columns: list[str] = []
     statement_list: StatementList = StatementList()
     pked: bool = False
     for key, value in vars(object).items():
-        if key in column_descriptions and column_descriptions[key].type == type(value):
+        if key in column_descriptions and __validate_type__(column_descriptions[key].type, type(value)):
             data.append(value)
             obj_columns.append(key)
             if not pked:
-                statement: Statement = StatementList(Statement(key, Operator.EQUAL, stringify(value)))
+                statement: Statement = StatementList(Statement(Column(key), Operator.EQUAL, __stringify__(value)))
                 if column_descriptions[key].primary_key:
                     statement_list = StatementList(statement)
                     pked = True
                 else:
                     statement_list.append(statement)
     return ProcessedObject(data, obj_columns, statement_list)
+
+def __validate_type__(column: type, value: type) -> bool:
+    if column == value:
+        return True
+    if __is_list__(column) and __is_list__(value):
+        return True
+    return False
+
+def __is_list__(t: type) -> bool:
+    return t == list or hasattr(t, "__origin__") and t.__origin__ == list
