@@ -31,7 +31,7 @@ def test_model_sqlite():
     # Create database and table
     # Ensure that it is empty
     print("=== Creating")
-    database: Database = Database("test.db", logging=True)
+    database: Database = Database("test.db")
     table: Messages = Messages("test", database, MessageModel)
     assert table.select() == []
     # Insert a row into the table
