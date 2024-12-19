@@ -3,7 +3,7 @@ name = "model-sqlite"
 version = "0.2"
 description = "A model/class based system for interacting with an using SQLite"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.13"
 authors = [{name = "Dominic Coletti"}]
 license = {text = "Apache-2.0"}
 classifiers = [
