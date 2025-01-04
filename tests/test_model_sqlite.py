@@ -1,4 +1,5 @@
-from newsystem import Database, Table, PrimaryKey
+from __future__ import annotations
+from model_sqlite import Database, Table, PrimaryKey
 
 
 
@@ -29,14 +30,16 @@ class MessageObj:
 def test_model_sqlite():
     # Create database and table
     # Ensure that it is empty
+    print("Create table and test empty")
     database: Database = Database("test.db")
     table: Table = Table(database, "messages", Message)
-    assert table.select() == []
+    assert table.SELECT().TO_LIST() == []
     # Insert a row into the table
     # Ensure that it matches
+    print("Insert value and check")
     message: MessageObj = MessageObj("Test", {"readonly": True, "edits": 3}, None, ["one", "two"])
-    table.insert(message)
-    select: list[Message] = table.select().to_list()
+    table.INSERT(message)
+    select: list[Message] = table.SELECT().TO_LIST()
     assert len(select) == 1
     assert select[0].id == 1
     assert select[0].message == message.message
@@ -44,11 +47,12 @@ def test_model_sqlite():
     assert select[0].creator == message.creator
     assert select[0].viewers == message.viewers
     # Reload database and table, to ensure proper loading of an existing table
+    print("Reload table and check")
     database = None
     table = None
     database = Database("test.db")
     table: Table = Table(database, "messages", Message)
-    select = table.select().to_list()
+    select = table.SELECT().TO_LIST()
     assert len(select) == 1
     assert select[0].id == 1
     assert select[0].message == message.message
@@ -57,13 +61,19 @@ def test_model_sqlite():
     assert select[0].viewers == message.viewers
     # Updated existing row in database
     # Ensure that the row updates
+    print("Update and check")
     updatedMessage: Message = select[0]
     updatedMessage.message = "Test 'test'"
     updatedMessage.attributes["edits"] = 5
     updatedMessage.creator = "Sir. Tests-a-lot"
     updatedMessage.viewers.append("three")
-    table.update(updatedMessage)
-    select = table.select().to_list()
+    select[0].message = updatedMessage.message
+    select[0].attributes = updatedMessage.attributes
+    select[0].creator = updatedMessage.creator
+    select[0].viewers = updatedMessage.viewers
+    table.save_changes()
+    # table.UPDATE(updatedMessage)
+    select = table.SELECT().TO_LIST()
     assert len(select) == 1
     assert select[0].id == updatedMessage.id
     assert select[0].message == updatedMessage.message
@@ -72,10 +82,8 @@ def test_model_sqlite():
     assert select[0].viewers == updatedMessage.viewers
     # Delete value from database
     # Ensure that it is deleted
-    deleting: Message = Message()
-    deleting.id = 1
-    table.delete(deleting)
-    select = table.select().to_list()
+    table.SELECT().WHERE().COLUMN("id").EQUALS().VALUE(1).DELETE()
+    select = table.SELECT().TO_LIST()
     assert len(select) == 0
     # Dealing with multiple values
     messages: list[Message] = []
@@ -84,8 +92,8 @@ def test_model_sqlite():
     messages.append(MessageObj("Third is the one with the treasure chest"))
     messages.append(Message())
     for message in messages:
-        table.insert(message)
-    select = table.select().to_list()
+        table.INSERT(message)
+    select = table.SELECT().TO_LIST()
     assert len(select) == 4
     for i in range(len(select)):
         assert select[i].id == i + 1
@@ -95,21 +103,8 @@ def test_model_sqlite():
         assert select[i].viewers == messages[i].viewers
     # Advanced selecting
 
-    # # Select single column
-    # select = table.select(["message"])
-    # default: Message = Message()
-    # for i in range(len(select)):
-    #     assert select[i].id == default.id
-    #     assert select[i].message == messages[i].message
-    #     assert select[i].attributes == default.attributes
-    #     assert select[i].creator == default.creator
-    #     assert select[i].viewers == default.viewers
-
     # Select with where, one statements
-    select = table.select().where().column('creator').equals().value(messages[1].creator).to_list()
-    # statementList: StatementList = StatementList()
-    # statementList.append(Statement(Column("creator"), Operator.EQUAL, messages[1].creator))
-    # select = table.select(where=statementList)
+    select = table.SELECT().WHERE().COLUMN('creator').EQUALS().VALUE(messages[1].creator).TO_LIST()
     assert len(select) == 2
     for i in range(len(select)):
         assert select[i].id == i + 1
@@ -118,9 +113,7 @@ def test_model_sqlite():
         assert select[i].creator == "Child"
         assert select[i].viewers == messages[i].viewers
     # Select with where, two statements
-    select = table.select().where().column('creator').equals().value(messages[1].creator).AND().column('message').equals().value(messages[1].message).to_list()
-    # statementList.append(Statement(Column("message"), Operator.EQUAL, messages[1].message))
-    # select = table.select(where=statementList)
+    select = table.SELECT().WHERE().COLUMN('creator').EQUALS().VALUE(messages[1].creator).AND().COLUMN('message').EQUALS().VALUE(messages[1].message).TO_LIST()
     assert len(select) == 1
     assert select[0].id == 2
     assert select[0].message == messages[1].message
@@ -129,18 +122,17 @@ def test_model_sqlite():
     assert select[0].viewers == messages[1].viewers
 
     # # Select length
-    # select = table.select(length=2)
-    # assert len(select) == 2
-    # for i in range(len(select)):
-    #     assert select[i].id == i + 1
-    #     assert select[i].message == messages[i].message
-    #     assert select[i].attributes == messages[i].attributes
-    #     assert select[i].creator == messages[i].creator
-    #     assert select[i].viewers == messages[i].viewers
+    select = table.SELECT().LIMIT(2).TO_LIST()
+    assert len(select) == 2
+    for i in range(len(select)):
+        assert select[i].id == i + 1
+        assert select[i].message == messages[i].message
+        assert select[i].attributes == messages[i].attributes
+        assert select[i].creator == messages[i].creator
+        assert select[i].viewers == messages[i].viewers
 
     # Sort ascending
-    select = table.select().order_by('message').to_list()
-    # select = table.select(sort_column="message", sort_order=SortOrder.ASC)
+    select = table.SELECT().ORDER_BY('message').TO_LIST()
     assert len(select) == 4
     for i in range(len(select)):
         j: int = select[i].id - 1
@@ -152,8 +144,7 @@ def test_model_sqlite():
         if k > -1 and k < len(select):
             assert select[k].message < select[i].message
     # Sort descending
-    select = table.select().order_by('message', true).to_list()
-    # select = table.select(sort_column="message", sort_order=SortOrder.DESC)
+    select = table.SELECT().ORDER_BY('message', True).TO_LIST()
     assert len(select) == 4
     for i in range(len(select)):
         j: int = select[i].id - 1
@@ -169,5 +160,5 @@ def test_model_sqlite():
     # Clear
     table.clear()
     # Table is empty
-    assert table.select() == []
+    assert table.SELECT().TO_LIST() == []
     assert table.is_empty == True
