@@ -1,6 +1,6 @@
 [project]
 name = "model-sqlite"
-version = "0.2"
+version = "0.3"
 description = "A model/class based system for interacting with an using SQLite"
 readme = "README.md"
 requires-python = ">=3.13"
